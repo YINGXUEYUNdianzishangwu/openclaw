@@ -1,0 +1,49 @@
+name: 每日同步上游OpenClaw
+on:
+  workflow_dispatch:
+  schedule:
+    # 北京时间 凌晨02:00 执行（UTC 前一天18点）
+    - cron: '0 18 * * *'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出main分支
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: 绑定上游官方仓库
+        run: |
+          git remote remove upstream || true
+          git remote add upstream https://github.com/openclaw/openclaw.git
+          git fetch upstream main
+
+      - name: 创建临时分支合并上游代码
+        run: |
+          git checkout -b sync-upstream-auto
+          git merge upstream/main --no-commit || true
+
+      - name: 判断是否有代码变更
+        id: check_diff
+        run: |
+          git diff --quiet && echo "has_update=false" >> $GITHUB_OUTPUT || echo "has_update=true" >> $GITHUB_OUTPUT
+
+      - name: 有更新才创建PR
+        if: steps.check_diff.outputs.has_update == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: main
+          branch: sync-upstream-auto
+          title: 【自动同步】OpenClaw上游main更新
+          body: |
+            自动拉取 openclaw/openclaw 官方main分支更新
+            ⚠️ 如果提示冲突，必须手动解决冲突，再合并PR
+          labels: auto-sync
