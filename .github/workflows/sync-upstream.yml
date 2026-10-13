@@ -35,7 +35,15 @@ jobs:
           git remote get-url upstream >/dev/null 2>&1 || git remote add upstream https://github.com/OpenClaw/OpenClaw.git
       - name: 拉取上游全部分支
         run: git fetch upstream
+      - name: 拉取上游全部分支
+        run: |
+          git fetch upstream
+
+      - name: 配置Git提交身份
+        run: |
+          git config user.name "YINGXUEYUN"
+          git config user.email "905201509@qq.com"
+
       - name: 合并上游main到本地main
-        run: git merge upstream/main
-      - name: 推送合并后的代码到本仓库
-        run: git push origin main
+        run: |
+          git merge upstream/main
