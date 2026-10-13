@@ -15,9 +15,9 @@
 # 2026-10-13 Auto sync upstream main branch
 name: 每日同步上游OpenClaw
 on:
-  schedule:
-    - cron: '0 18 * * *'
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # UTC时间，每日凌晨2点定时执行
 permissions:
   contents: write
   pull-requests: write
@@ -37,6 +37,8 @@ jobs:
         run: git fetch upstream
       - name: 合并上游main到本地main
         run: |
-         git config user.name "英雪云"
-         git config user.email "905201509@qq.com"
-         git merge upstream/main
+          git config user.name "英雪云"
+          git config user.email "905201509@qq.com"
+          git merge upstream/main
+      - name: 推送合并后的代码到本仓库
+        run: git push origin main
