@@ -1,7 +1,8 @@
+# 2026-10-13 fix permissions field, rebuild sync workflow
 name: 每日同步上游OpenClaw
 on:
   schedule:
-    - cron: '0 18 * * *'
+    - cron: '0 1 * * *'
   workflow_dispatch:
 permissions:
   contents: write
