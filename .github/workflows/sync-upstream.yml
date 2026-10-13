@@ -1,35 +1,26 @@
 name: 每日同步上游OpenClaw
 on:
-  # 1. 定时自动触发：UTC 18:00 = 北京时间次日 02:00，每天自动执行
   schedule:
     - cron: '0 18 * * *'
-  # 2. 保留手动触发入口（用于调试，可选，这里不设置任何必填输入）
   workflow_dispatch:
-
-# 授予权限
 permissions:
   contents: write
   pull-requests: write
-
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码，使用PAT
+      - name: 检出代码，使用SYNC_PAT
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # 从仓库Secret读取PAT，自动使用，无需人工填写
           token: ${{ secrets.SYNC_PAT }}
-
-      - name: 添加上游OpenClaw远程仓库
-        run: git remote add upstream https://github.com/OpenClaw/OpenClaw.git
-
-      - name: 拉取上游仓库所有分支
+      - name: 添加上游远程仓库
+        run: |
+          git remote get-url upstream >/dev/null 2>&1 || git remote add upstream https://github.com/OpenClaw/OpenClaw.git
+      - name: 拉取上游全部分支
         run: git fetch upstream
-
-      - name: 合并上游main分支到本地main
-        run: git merge upstream/main --allow-unrelated-histories
-
-      - name: 推送合并后的代码到当前仓库main分支
+      - name: 合并上游main到本地main
+        run: git merge upstream/main
+      - name: 推送合并后的代码到本仓库
         run: git push origin main
