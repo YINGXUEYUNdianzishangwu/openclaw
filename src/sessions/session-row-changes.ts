@@ -13,7 +13,13 @@ import { notifyListeners, registerListener } from "../shared/listeners.js";
 
 export type SessionRowFacts =
   | { kind: "unchanged" }
-  | { kind: "replacement"; membership: SessionMembershipFact; lifecycleChanged?: boolean }
+  | {
+      kind: "replacement";
+      membership: SessionMembershipFact;
+      /** Missing policy coverage must not preserve an already prepared send. */
+      communicationBinding?: string;
+      lifecycleChanged?: boolean;
+    }
   | {
       kind: "acp";
       sessionId: string | undefined;
@@ -42,6 +48,8 @@ export type SessionRowFacts =
       kind: "participants";
       /** Participant history belongs to the logical key, across transcript replacements. */
       projection?: Pick<SessionEntry, "participants" | "participantCount">;
+      /** Count-only contributions leave display identity and ordering unchanged. */
+      projectionChanged?: false;
     }
   | { kind: "category"; sessionId: string; category: string | null }
   | { kind: "removed" };

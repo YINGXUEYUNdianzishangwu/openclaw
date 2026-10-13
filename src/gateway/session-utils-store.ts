@@ -22,7 +22,7 @@ import { resolveSandboxConfigForAgent } from "../agents/sandbox/config.js";
 import { SESSION_PERMISSION_BY_EXEC_MODE } from "../agents/session-permission-exec-mode.js";
 import { readUtilityModelSetting } from "../agents/utility-model-setting.js";
 import { resolveConfiguredPrimaryModelForAgent } from "../agents/utility-model.js";
-import { insideGitCheckout } from "../agents/worktrees/git.js";
+import { hasWorkspaceGitCheckout } from "../agents/workspace-git.js";
 import { getRuntimeConfig } from "../config/io.js";
 import { resolveAgentModelFallbackValues } from "../config/model-input.js";
 import {
@@ -249,6 +249,7 @@ export async function withQualifiedGatewaySessionEntry<T>(params: {
   logicalStorePath: string;
   env?: NodeJS.ProcessEnv;
   includeMembership: boolean;
+  transcript?: import("../config/sessions/session-entry-read.types.js").SessionExactEntriesWorkerRequest["transcript"];
   includeLifecycle?: boolean;
   consume: Parameters<typeof withGatewaySessionEntry<T>>[2];
   assertConfigCurrent: () => void;
@@ -256,6 +257,7 @@ export async function withQualifiedGatewaySessionEntry<T>(params: {
   return withQualifiedGatewaySessionStoreTarget({
     ...params,
     readOptions: {
+      transcript: params.transcript,
       lifecycleSessionKey: params.includeLifecycle ? params.target.storeKey : undefined,
     },
     consume: (target, membership, assertSourceCurrent) => {
@@ -477,7 +479,7 @@ export async function listAgentsForGateway(
     const workspace = resolveAgentWorkspaceDir(cfg, id);
     // Must mirror the sessions.create worktree preflight: subdirectory workspaces inside a
     // repo are worktree-capable, so the UI toggle and the create path cannot diverge.
-    const workspaceGit = insideGitCheckout(workspace);
+    const workspaceGit = hasWorkspaceGitCheckout(workspace);
     const agent = Object.assign(
       {
         id,

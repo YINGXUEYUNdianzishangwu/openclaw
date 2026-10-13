@@ -79,6 +79,7 @@ import {
   createWithWorktreeAllocation,
   createOwnedWorktree,
   prepareWorktreeDestination,
+  readWorktreeGitInventory,
   findWorktreeByName,
   resolveRepository,
   rebindLiveWorktreeRepository,
@@ -141,7 +142,10 @@ type ManagedWorktreeGcParams = WorktreeCleanupOwnerPolicy &
 
 type RepositoryCreationParams = CreateManagedWorktreeParams &
   WorktreeAllocationGuard &
-  WorktreeSourceCustody & { prepareBase?: WorktreeBasePreparation };
+  WorktreeSourceCustody & {
+    prepareBase?: WorktreeBasePreparation;
+    gitInventory: Awaited<ReturnType<typeof readWorktreeGitInventory>>;
+  };
 
 type WorktreeCreation =
   | ManagedWorktreeCreationOutcome
@@ -207,7 +211,11 @@ export class ManagedWorktreeService {
             async (guard, publication) =>
               await withWorktreeSources(this.env, async (retainRepository) => {
                 const retainSources = await retainRepository({ ...params, ...guard, repository });
-                const owned = { ...params, ...guard, retainSources, prepareBase };
+                const gitInventory = await readWorktreeGitInventory(
+                  repository.repoRoot,
+                  params.name,
+                );
+                const owned = { ...params, ...guard, retainSources, prepareBase, gitInventory };
                 const creation = await this.withAllocationLease(owned, (allocation) =>
                   this.reserveForOwner(owned, allocation, repository, publication),
                 );
@@ -246,12 +254,14 @@ export class ManagedWorktreeService {
                     });
                     sourceRoot = repoRoot;
                     const repository = await resolveRepository(repoRoot);
+                    const gitInventory = await readWorktreeGitInventory(repoRoot, params.name);
                     const prepared = {
                       ...params,
                       ...guard,
                       repoRoot,
                       baseRef: "main",
                       runSetupScript: false,
+                      gitInventory,
                     };
                     const retainSources = await retainRepository({ ...prepared, repository });
                     return await this.reserveForOwner(
@@ -458,6 +468,7 @@ export class ManagedWorktreeService {
       env: this.env,
       configuredRoot: this.getConfig?.().worktreeRoot,
       repository,
+      gitInventory: params.gitInventory,
       owner: params,
       suppliedName,
       suggestedName: params.suggestedName ?? inferredName,
@@ -498,7 +509,7 @@ export class ManagedWorktreeService {
           { ...current, retainSources: params.retainSources, prepareBase: params.prepareBase },
           repository,
           destination,
-          publication,
+          publication.id,
         );
         prepared = true;
         return created;
@@ -571,10 +582,10 @@ export class ManagedWorktreeService {
   }
 
   private async materializeRepositoryWorktree(
-    params: RepositoryCreationParams,
+    params: Omit<RepositoryCreationParams, "gitInventory">,
     repository: ResolvedRepository,
     destination: Awaited<ReturnType<typeof prepareWorktreeDestination>>,
-    publication: WorktreeCreationPublication,
+    worktreeId: string,
   ): Promise<MaterializedRepositoryWorktree> {
     const { root, worktreePath, branch } = destination;
     // Default-base resolution fetches remote refs; it is an effect, not just discovery.
@@ -650,7 +661,7 @@ export class ManagedWorktreeService {
           ? {
               onPromptReady: async (commit: string) =>
                 onPromptReady({
-                  id: publication.id,
+                  id: worktreeId,
                   path: worktreePath,
                   branch,
                   repoRoot: repository.repoRoot,
@@ -682,17 +693,6 @@ export class ManagedWorktreeService {
         signal: params.signal,
         commitGuard: () => params.commitGuard?.(),
         rollbackGuard: params.rollbackGuard,
-        deferUnpreparedCleanup: (cleanup) => {
-          publication.cleanup = async (assertCurrent) => {
-            assertCurrent();
-            const live = await readRegistryWorktrees(this.env, { liveOnly: true });
-            assertCurrent();
-            if (live.some((record) => record.path === worktreePath)) {
-              throw new Error("Worktree was published before cleanup; checkout preserved.");
-            }
-            await cleanup(assertCurrent);
-          };
-        },
       });
     };
     const added = await timeWorktreePreparationPhase("checkout", addCheckout);
