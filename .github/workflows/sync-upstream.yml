@@ -13,7 +13,7 @@
 # limitations under the License.
 #
 # 2026-10-13 Auto sync upstream main branch
-name: 每日同步上游OpenClaw
+name: OpenClaw
 on:
   workflow_dispatch:
   schedule:
