@@ -15,6 +15,14 @@ export function createBaselineFixture(root: string, productCount = 16) {
   for (const dir of [repo, home, bin]) {
     mkdirSync(dir);
   }
+  // Baseline operations require these at preflight but must not run builds or searches.
+  for (const command of ["rg", "pnpm"]) {
+    writeFileSync(
+      join(bin, command),
+      `#!/bin/sh\necho 'Unexpected fixture command: ${command}' >&2\nexit 99\n`,
+      { mode: 0o755 },
+    );
+  }
   const env = {
     PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
     HOME: home,
@@ -126,7 +134,10 @@ if (args[0] === 'api' && args[1] === 'user') {
   };
   const local = (name: string) => join(worktree, ".local", name);
   writeFileSync(local("pr-meta.json"), JSON.stringify(meta));
-  writeFileSync(local("pr-meta.env"), `PR_NUMBER=42\nPR_HEAD=topic\nPR_HEAD_SHA=${incoming}\n`);
+  writeFileSync(
+    local("pr-meta.env"),
+    `PR_NUMBER=42\nPR_HEAD=topic\nPR_HEAD_SHA=${incoming}\nPR_HEAD_REPO_URL=https://github.com/fixture/repo\n`,
+  );
   writeFileSync(local("review-mode.env"), "REVIEW_MODE=pr\n");
   const review = validReview(incoming);
   review.recommendation = "NEEDS WORK";
@@ -173,6 +184,33 @@ if (args[0] === 'api' && args[1] === 'user') {
     }
     git(repo, "commit", "-qam", `test: ${label}`);
     return git(repo, "rev-parse", "HEAD");
+  };
+  const preparePublication = () => {
+    git(repo, "config", `url.${repo}.insteadOf`, "https://github.com/fixture/repo.git");
+    const head = git(worktree, "rev-parse", "HEAD");
+    const stamp = spawnSync(
+      process.platform === "darwin" ? "/bin/bash" : "bash",
+      [
+        "-c",
+        'source "$1"; write_gates_env_stamp 42 true false github_pending "" "" "$2" "" "" "" ""',
+        "fixture-gates",
+        join(repo, "scripts/pr-lib/gates.sh"),
+        head,
+      ],
+      { cwd: worktree, env, encoding: "utf8" },
+    );
+    expect(stamp.status, stamp.stderr).toBe(0);
+    return head;
+  };
+  const publish = () => {
+    const hosted = git(repo, "rev-parse", "topic");
+    const head = preparePublication();
+    pass("prepare-push");
+    expect(git(repo, "rev-parse", "topic")).toBe(head);
+    expect(readFileSync(local("prepare-push-result.env"), "utf8")).toContain(
+      `PUSHED_FROM_SHA=${hosted}`,
+    );
+    return head;
   };
   const manifest = (baseline: string, changed = product) => {
     const source = git(worktree, "rev-parse", "HEAD");
@@ -239,6 +277,8 @@ if (args[0] === 'api' && args[1] === 'user') {
     run,
     approve,
     advanceMain,
+    preparePublication,
+    publish,
     manifest,
     successor,
     product,
